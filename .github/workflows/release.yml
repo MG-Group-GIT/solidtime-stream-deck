@@ -1,0 +1,53 @@
+name: Build & Release
+
+# Builds the plugin, packs it as .streamDeckPlugin and publishes it as a GitHub release.
+# The release tag is taken from the "Version" in the manifest (e.g. 1.1.0.0 -> v1.1.0.0).
+# Pushing again without bumping the version replaces the file in the existing release.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SD_PLUGIN: de.moa.solidtime-deck.sdPlugin
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Read version
+        id: version
+        run: echo "version=$(node -p "require('./${SD_PLUGIN}/manifest.json').Version")" >> "$GITHUB_OUTPUT"
+
+      - name: Pack plugin
+        run: npx streamdeck pack "${SD_PLUGIN}" --output dist --force --no-update-check
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.streamDeckPlugin --clobber
+          else
+            gh release create "$TAG" dist/*.streamDeckPlugin \
+              --title "Solidtime Plus $TAG" \
+              --target "$GITHUB_SHA" \
+              --generate-notes
+          fi
