@@ -78,6 +78,7 @@ export type TimeEntryStartRequest = {
 // For PUT /v1/organizations/{org}/time-entries/{id}
 export type TimeEntryStopRequest = {
     end: string; // ISO 8601 string
+    description?: string | null; // reason entered in the stop popup
 };
 
 // New type: Tag

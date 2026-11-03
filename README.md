@@ -24,6 +24,13 @@
 - See running status and elapsed time on your Stream Deck.
 - Add tags and descriptions directly when starting a timer.
 
+### Solidtime Plus additions (this fork)
+
+- **Stop reason popup:** when a timer is stopped (or replaced by another project), a native popup on the computer asks for the reason. Pick one of the predefined reasons (global settings, one per line) or type your own; it is saved as the entry's description. "Abbrechen" keeps the timer running. Can be turned off in the global settings.
+- **Running color:** each key has a color picker for the background while its timer is running.
+- Own plugin UUID (`de.moa.solidtime-deck`), so it can be installed next to the original plugin.
+- Note: Solidtime allows only one running timer per user, so starting another project still stops the current one.
+
 ## Requirements
 
 - Stream Deck app 6.5 or newer (Windows 10 / macOS 12 or later).

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
 
-<head lang="en">
-    <title>Solidtime Settings</title>
+<head lang="de">
+    <title>Solidtime Plus</title>
     <meta charset="utf-8" />
     <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
     <style>
@@ -41,29 +41,38 @@
 
 <body>
     <div class="section" id="global-settings">
-        <div class="section-title">Global Settings</div>
+        <div class="section-title">Globale Einstellungen</div>
         <sdpi-item label="Solidtime URL">
             <sdpi-textfield 
                 id="base-url-input"
                 global 
                 setting="solidtimeBaseUrl" 
-                placeholder="e.g.:https://app.solidtime.io/api"
+                placeholder="z. B. https://app.solidtime.io/api"
                 pattern="^https?://.+/api/?$"
                 required>
             </sdpi-textfield>
-            <sdpi-note id="base-url-warning" style="display:none; margin-top:6px;">URL must end with “/api”. Example: https://app.solidtime.io/api</sdpi-note>
+            <sdpi-note id="base-url-warning" style="display:none; margin-top:6px;">URL muss auf „/api“ enden. Beispiel: https://app.solidtime.io/api</sdpi-note>
         </sdpi-item>
 
         <sdpi-item label="Access Token">
-            <sdpi-password 
-                global 
-                setting="accessToken" 
+            <sdpi-password
+                global
+                setting="accessToken"
                 required>
             </sdpi-password>
         </sdpi-item>
+
+        <sdpi-item label="Grund-Popup" title="Beim Stoppen eines Timers ein Fenster am PC anzeigen, in dem der Grund eingetragen wird. Er wird als Beschreibung gespeichert.">
+            <sdpi-checkbox global setting="askStopReason" default="true" label="Beim Stoppen nach Grund fragen"></sdpi-checkbox>
+        </sdpi-item>
+
+        <sdpi-item label="Gründe">
+            <sdpi-textarea global setting="stopReasons" rows="4" placeholder="Server-Update&#10;Meeting&#10;Support"></sdpi-textarea>
+            <sdpi-note style="margin-top:6px;">Ein Grund pro Zeile. Im Popup auswählbar, eigener Text ist trotzdem möglich. „Abbrechen“ lässt den Timer weiterlaufen.</sdpi-note>
+        </sdpi-item>
     </div>
 
-    <sdpi-item label="Organization">
+    <sdpi-item label="Organisation">
         <!-- Wrap in flex-container to add the button -->
         <div class="flex-container">
             <div class="flex-grow">
@@ -71,41 +80,41 @@
                     id="org-select"
                     setting="organizationId"
                     datasource="getOrganizations"
-                    loading="Fetching..."
-                    placeholder="Select an organization"
+                    loading="Lädt …"
+                    placeholder="Organisation wählen"
                     value-type="string">
                     
                 </sdpi-select>
             </div>
             <div class="flex-shrink">
                 <!-- Add the organization refresh button -->
-                <sdpi-button id="org-refresh-btn">Refresh</sdpi-button>
+                <sdpi-button id="org-refresh-btn">Neu laden</sdpi-button>
             </div>
         </div>
-        <sdpi-note id="org-warning" style="display:none; margin-top:6px;">No organizations found. Check URL/Token and refresh.</sdpi-note>
+        <sdpi-note id="org-warning" style="display:none; margin-top:6px;">Keine Organisationen gefunden. URL/Token prüfen und neu laden.</sdpi-note>
     </sdpi-item>
 
-    <sdpi-item label="Project">
+    <sdpi-item label="Projekt">
         <div class="flex-container">
             <div class="flex-grow">
                 <sdpi-select
                     id="project-select"
                     setting="projectId"
                     datasource="getProjects"
-                    loading="Fetching projects..."
-                    placeholder="Select a project"
+                    loading="Lädt Projekte …"
+                    placeholder="Projekt wählen"
                     disabled>
                 </sdpi-select>
             </div>
             <div class="flex-shrink">
-                <sdpi-button id="project-refresh-btn" disabled>Refresh</sdpi-button>
+                <sdpi-button id="project-refresh-btn" disabled>Neu laden</sdpi-button>
             </div>
         </div>
-        <sdpi-note id="project-warning" style="display:none; margin-top:6px;">Previously selected project is no longer available. Please reselect.</sdpi-note>
+        <sdpi-note id="project-warning" style="display:none; margin-top:6px;">Das gewählte Projekt ist nicht mehr verfügbar. Bitte neu wählen.</sdpi-note>
     </sdpi-item>
 
-    <sdpi-item label="Description" title="Optional description for the time entry.">
-        <sdpi-textfield setting="description" placeholder="Optional description"></sdpi-textfield>
+    <sdpi-item label="Beschreibung" title="Optionale Beschreibung für den Zeiteintrag.">
+        <sdpi-textfield setting="description" placeholder="Optionale Beschreibung"></sdpi-textfield>
     </sdpi-item>
 
     <sdpi-item label="Tags">
@@ -115,34 +124,38 @@
                     id="tags-list"
                     setting="tagIds"
                     datasource="getTags"
-                    loading="Fetching tags..."
+                    loading="Lädt Tags …"
                     disabled>
                 </sdpi-checkbox-list>
             </div>
             <div class="flex-shrink">
-                <sdpi-button id="tags-refresh-btn" disabled>Refresh</sdpi-button>
+                <sdpi-button id="tags-refresh-btn" disabled>Neu laden</sdpi-button>
             </div>
         </div>
-        <sdpi-note id="tags-helper" style="display:none; margin-top:6px;">Select an organization to choose tags.</sdpi-note>
-        <sdpi-note id="tags-empty" style="display:none; margin-top:6px;">No tags found for this organization.</sdpi-note>
-        <sdpi-note id="tags-removed-warning" style="display:none; margin-top:6px;">Some previously selected tags are no longer available and were removed.</sdpi-note>
-        <sdpi-note id="tags-error" style="display:none; margin-top:6px;">Failed to update tags on the running entry.</sdpi-note>
+        <sdpi-note id="tags-helper" style="display:none; margin-top:6px;">Erst eine Organisation wählen, dann Tags.</sdpi-note>
+        <sdpi-note id="tags-empty" style="display:none; margin-top:6px;">Keine Tags in dieser Organisation.</sdpi-note>
+        <sdpi-note id="tags-removed-warning" style="display:none; margin-top:6px;">Einige gewählte Tags gibt es nicht mehr; sie wurden entfernt.</sdpi-note>
+        <sdpi-note id="tags-error" style="display:none; margin-top:6px;">Tags am laufenden Eintrag konnten nicht aktualisiert werden.</sdpi-note>
     </sdpi-item>
 
-    <sdpi-item label="Billable" title="Mark time entries as billable by default for this project.">
+    <sdpi-item label="Abrechenbar" title="Zeiteinträge für dieses Projekt standardmäßig als abrechenbar markieren.">
         <sdpi-checkbox setting="billable" default="true"></sdpi-checkbox>
     </sdpi-item>
     
-    <sdpi-item label="Title Display" title="Configure the button's title text and timer visibility.">
+    <sdpi-item label="Titel" title="Titeltext der Taste und Anzeige der Laufzeit.">
         <div class="flex-container">
             <div class="flex-grow">
-                <sdpi-textfield setting="titleOverride" placeholder="Optional override"></sdpi-textfield>
+                <sdpi-textfield setting="titleOverride" placeholder="Optional überschreiben"></sdpi-textfield>
             </div>
             <div class="flex-shrink">
                 <!-- The label is now an attribute of the component -->
-                <sdpi-checkbox setting="showElapsedTime" default="true" label="Show Time"></sdpi-checkbox>
+                <sdpi-checkbox setting="showElapsedTime" default="true" label="Zeit zeigen"></sdpi-checkbox>
             </div>
         </div>
+    </sdpi-item>
+
+    <sdpi-item label="Farbe (läuft)" title="Hintergrundfarbe der Taste, solange der Timer läuft.">
+        <sdpi-color setting="runningColor" default="#2f9e44"></sdpi-color>
     </sdpi-item>
 
     <!-- <sdpi-item id="dev-log-container" label="Dev Log" style="margin-top:12px;">

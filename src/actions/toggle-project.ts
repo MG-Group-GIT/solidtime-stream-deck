@@ -1,11 +1,13 @@
 import type { JsonValue } from "@elgato/utils";
 import { action, SendToPluginEvent, WillAppearEvent, WillDisappearEvent, SingletonAction, streamDeck, KeyDownEvent, DidReceiveSettingsEvent, KeyAction } from "@elgato/streamdeck";
 import { ApiClient } from "../api/client";
-import { Project, TimeEntry, Membership, Tag } from "../api/types";
-import { ActionSettings } from "../settings";
+import { Project, TimeEntry, Membership, Tag, TimeEntryStopRequest } from "../api/types";
+import { ActionSettings, GlobalSettings } from "../settings";
+import { normalizeColor, runningKeyImage } from "../key-image";
+import { parseReasons, promptStopReason } from "../stop-reason-dialog";
 
 // IMPORTANT: These state indices must match the order of the "States" array
-// in `com.benjavides.solidtime-deck.sdPlugin/manifest.json`.
+// in `de.moa.solidtime-deck.sdPlugin/manifest.json`.
 // 0 = Not Running, 1 = Running
 const STOPPED_STATE = 0;
 const RUNNING_STATE = 1;
@@ -18,6 +20,7 @@ type PluginContext = {
     getProjectsForOrg: (orgId: string, opts?: { refresh?: boolean }) => Promise<Project[]>;
     getMemberIdForOrg: (orgId: string) => string | undefined;
     getTagsForOrg: (orgId: string, opts?: { refresh?: boolean }) => Promise<Tag[]>;
+    getGlobalSettings: () => GlobalSettings;
 };
 
 /**
@@ -62,7 +65,7 @@ function normalizeTagIds(v: unknown): string[] | undefined {
 }
 
 
-@action({ UUID: "com.benjavides.solidtime-deck.toggle-project" })
+@action({ UUID: "de.moa.solidtime-deck.toggle-project" })
 export class ToggleProjectAction extends SingletonAction<ActionSettings> {
     // Properties to hold the shared API client and data from the main plugin.
     private apiClient?: ApiClient;
@@ -73,10 +76,15 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
     private getProjectsForOrg?: (orgId: string, opts?: { refresh?: boolean }) => Promise<Project[]>;
     private getMemberIdForOrg?: (orgId: string) => string | undefined;
     private getTagsForOrg?: (orgId: string, opts?: { refresh?: boolean }) => Promise<Tag[]>;
+    private getGlobalSettings?: () => GlobalSettings;
 
     // A cache to store the last title set for each button, preventing unnecessary updates and flickering.
     private lastTitles: Map<string, string> = new Map();
     private lastSettingsByActionId: Map<string, ActionSettings> = new Map();
+    // Same idea for the running-state image: only re-send it when the chosen color changes.
+    private lastRunningColors: Map<string, string> = new Map();
+    // While the stop popup is open, further key presses are ignored so only one popup exists at a time.
+    private isPromptOpen = false;
 
     // --- Public Methods for Plugin Control ---
 
@@ -95,6 +103,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         this.getProjectsForOrg = context.getProjectsForOrg;
         this.getMemberIdForOrg = context.getMemberIdForOrg;
         this.getTagsForOrg = context.getTagsForOrg;
+        this.getGlobalSettings = context.getGlobalSettings;
     }
 
     // --- Title and State Update Logic ---
@@ -152,6 +161,17 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
     }
 
     /**
+     * Sets the image of the "Running" state to the color chosen in the button settings.
+     * Only sends the image when the color changed since the last call for this button.
+     */
+    private applyRunningColor(action: KeyAction<ActionSettings>, settings: ActionSettings): void {
+        const color = normalizeColor(settings.runningColor);
+        if (this.lastRunningColors.get(action.id) === color) return;
+        action.setImage(runningKeyImage(color), { state: RUNNING_STATE });
+        this.lastRunningColors.set(action.id, color);
+    }
+
+    /**
      * The main refresh function called by the polling timer. It iterates through all visible buttons
      * and updates their state and title to match the latest data from the API.
      */
@@ -169,8 +189,9 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
             }
 
             const isRunning = activeEntry && activeEntry.project_id === settings.projectId;
+            this.applyRunningColor(action, settings);
             action.setState(isRunning ? RUNNING_STATE : STOPPED_STATE);
-            
+
             await this.updateTitle(action, settings, activeEntry);
         }
     }
@@ -259,6 +280,7 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         // Cache latest settings for next diff and update title
         // On an org change the tags were just cleared above, so cache what was actually saved.
         this.lastSettingsByActionId.set(ev.action.id, { ...newSettings, tagIds: orgChanged ? [] : newTagIds });
+        this.applyRunningColor(ev.action, newSettings);
         await this.updateTitle(ev.action, newSettings, activeEntryForTitle);
     }
     
@@ -269,6 +291,10 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         if (!this.apiClient) {
             streamDeck.logger.warn("Key pressed before plugin was configured.");
             ev.action.showAlert();
+            return;
+        }
+        if (this.isPromptOpen) {
+            streamDeck.logger.info("Key pressed while the stop popup is open; ignoring.");
             return;
         }
 
@@ -300,17 +326,21 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
             }
 
             const isThisProjectRunning = activeEntry?.project_id === projectId;
+            // Captured at key press, so time spent in the stop popup is not tracked.
             const now = new Date().toISOString();
             const nowWithoutMilliseconds = now.split('.')[0] + 'Z';
 
             if (isThisProjectRunning) {
                 // Stop in the org where the active entry is running (could be different)
-                await this.apiClient.stopTimeEntry(activeEntry!.organization_id, activeEntry!.id, { end: nowWithoutMilliseconds });
+                await this.stopEntry(activeEntry!, nowWithoutMilliseconds);
             } else {
                 if (activeEntry) {
-                    await this.apiClient.stopTimeEntry(activeEntry.organization_id, activeEntry.id, { end: nowWithoutMilliseconds });
+                    // Solidtime allows only one running entry per user, so switching stops the old one.
+                    // If the popup for the old entry is cancelled, keep it running and don't start the new one.
+                    const stopped = await this.stopEntry(activeEntry, nowWithoutMilliseconds);
+                    if (!stopped) return;
                 }
-                
+
                 await this.apiClient.startTimeEntry(organizationId, {
                     member_id: memberId,
                     project_id: projectId,
@@ -333,19 +363,66 @@ export class ToggleProjectAction extends SingletonAction<ActionSettings> {
         }
     }
 
+    /**
+     * Stops a time entry. If enabled in the global settings, a popup first asks for the reason,
+     * which is saved as the entry's description.
+     * @returns `false` if the user cancelled the popup (the entry keeps running), otherwise `true`.
+     */
+    private async stopEntry(entry: TimeEntry, end: string): Promise<boolean> {
+        const request: TimeEntryStopRequest = { end };
+        const globalSettings = this.getGlobalSettings ? this.getGlobalSettings() : {};
+
+        if (globalSettings.askStopReason !== false) {
+            this.isPromptOpen = true;
+            try {
+                let projectName = '';
+                if (entry.project_id && this.getProjectsForOrg) {
+                    try {
+                        const projects = await this.getProjectsForOrg(entry.organization_id);
+                        projectName = projects.find(p => p.id === entry.project_id)?.name ?? '';
+                    } catch {}
+                }
+                const elapsed = formatElapsedTime((Date.parse(end) - Date.parse(entry.start)) / 1000);
+
+                const reason = await promptStopReason({
+                    title: 'Solidtime – Zeiterfassung beenden',
+                    message: `${projectName || 'Projekt'} (${elapsed})\nMit welchem Grund soll der Eintrag gespeichert werden?`,
+                    reasons: parseReasons(globalSettings.stopReasons),
+                    initial: entry.description ?? '',
+                });
+                if (reason === null) {
+                    streamDeck.logger.info("Stop popup cancelled; timer keeps running.");
+                    return false;
+                }
+                request.description = reason.trim() === '' ? null : reason.trim();
+            } catch (error) {
+                // Never block stopping the timer just because the popup could not be shown.
+                streamDeck.logger.error('Failed to show stop reason popup, stopping without reason:', error);
+            } finally {
+                this.isPromptOpen = false;
+            }
+        }
+
+        await this.apiClient!.stopTimeEntry(entry.organization_id, entry.id, request);
+        return true;
+    }
+
     override onWillAppear(ev: WillAppearEvent<ActionSettings>): void {
         if (!ev.action.isKey()) return;
         // Seed the diff baseline with the persisted settings so later events compare against reality.
         const settings = ev.payload.settings || {};
         this.lastSettingsByActionId.set(ev.action.id, { ...settings, tagIds: normalizeTagIds(settings.tagIds) || [] });
+        this.lastRunningColors.delete(ev.action.id);
+        this.applyRunningColor(ev.action, settings);
         ev.action.setState(STOPPED_STATE);
     }
-    
+
     /**
      * Cleans up the title cache when a button disappears to prevent memory leaks.
      */
     override onWillDisappear(ev: WillDisappearEvent<ActionSettings>): void {
         this.lastTitles.delete(ev.action.id);
+        this.lastRunningColors.delete(ev.action.id);
     }
 
     /**

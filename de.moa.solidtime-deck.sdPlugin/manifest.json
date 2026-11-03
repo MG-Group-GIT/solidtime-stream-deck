@@ -1,11 +1,11 @@
 {
-	"Name": "Solidtime",
-	"Version": "1.0.3.0",
-	"Author": "benjavides",
+	"Name": "Solidtime Plus",
+	"Version": "1.1.0.0",
+	"Author": "benjavides, MOA Group",
 	"Actions": [
 		{
 			"Name": "Toggle Project",
-			"UUID": "com.benjavides.solidtime-deck.toggle-project",
+			"UUID": "de.moa.solidtime-deck.toggle-project",
 			"Icon": "imgs/actions/toggle-project/icon",
 			"Tooltip": "Toggles a Solidtime project timer.",
 			"PropertyInspectorPath": "ui/toggle-project.html",
@@ -26,10 +26,10 @@
 			]
 		}
 	],
-	"Category": "Solidtime",
+	"Category": "Solidtime Plus",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
-	"Description": "Control Solidtime project timers with Stream Deck keys",
+	"Description": "Control Solidtime project timers with Stream Deck keys, ask for a reason on stop and pick the running color",
 	"Icon": "imgs/plugin/marketplace",
 	"SDKVersion": 3,
 	"Software": {
@@ -49,5 +49,5 @@
 		"Version": "20",
 		"Debug": "enabled"
 	},
-	"UUID": "com.benjavides.solidtime-deck"
+	"UUID": "de.moa.solidtime-deck"
 }

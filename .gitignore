@@ -5,4 +5,4 @@ node_modules/
 *.sdPlugin/bin
 *.sdPlugin/logs
 digest.txt
-com.benjavides.solidtime-deck.streamDeckPlugin
+de.moa.solidtime-deck.streamDeckPlugin

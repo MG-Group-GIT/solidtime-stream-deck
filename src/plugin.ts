@@ -12,6 +12,7 @@ let apiClient: ApiClient | undefined;
 let activeTimeEntry: TimeEntry | undefined;
 let pollingInterval: NodeJS.Timeout | undefined;
 let isPolling = false; // The lock to prevent overlapping polls.
+let globalSettings: GlobalSettings = {}; // Latest global settings (also non-credential ones like the stop popup).
 
 // Caches
 const MEMBERSHIP_TTL_MS = 60_000;
@@ -198,6 +199,7 @@ async function initializeApiClient(settings: GlobalSettings): Promise<void> {
             getTagsForOrg: async (orgId: string, opts?: { refresh?: boolean }) => {
                 return ensureTagsForOrg(orgId, Boolean(opts?.refresh));
             },
+            getGlobalSettings: () => globalSettings,
         });
 
         // Prime memberships cache
@@ -222,6 +224,7 @@ async function initializeApiClient(settings: GlobalSettings): Promise<void> {
 streamDeck.settings.onDidReceiveGlobalSettings(async (ev: DidReceiveGlobalSettingsEvent<GlobalSettings>) => {
     streamDeck.logger.info("Global settings were updated by the UI.");
     const newSettings = ev.settings;
+    globalSettings = newSettings;
     const normalizedBaseUrl = normalizeBaseUrl(newSettings.solidtimeBaseUrl);
 
     // Check if credentials have changed, requiring a full re-initialization.
@@ -240,6 +243,7 @@ streamDeck.devices.onDeviceDidConnect(async (ev: DeviceDidConnectEvent) => {
     streamDeck.logger.info(`Device ${ev.device.name} connected.`);
     streamDeck.logger.info("Checking for existing global settings...");
     const settings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+    globalSettings = settings;
     await initializeApiClient(settings);
 });
 
