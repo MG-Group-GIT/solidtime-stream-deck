@@ -72,7 +72,17 @@ $cancel.Size = New-Object System.Drawing.Size(96, 32)
 $form.Controls.Add($cancel)
 $form.CancelButton = $cancel
 
-$form.Add_Shown({ $form.Activate(); $combo.Focus(); $combo.SelectAll() })
+# The process is started hidden (no console flash) and Windows applies that "hidden" start flag to the
+# dialog as well, so show it explicitly through the Win32 API once it exists.
+Add-Type -Namespace SolidtimeDeck -Name Win32 -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+'@
+$form.Add_Shown({
+    [void][SolidtimeDeck.Win32]::ShowWindow($form.Handle, 5)
+    [void][SolidtimeDeck.Win32]::SetForegroundWindow($form.Handle)
+    $form.Activate(); $combo.Focus(); $combo.SelectAll()
+})
 $result = $form.ShowDialog()
 if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
     [Console]::Out.Write($combo.Text)
